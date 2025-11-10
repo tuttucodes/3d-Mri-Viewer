@@ -1,0 +1,28 @@
+{
+  "name": "3d-mri-viewer",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "npx playwright test",
+    "pretest": "vite build"
+  },
+  "dependencies": {
+    "@niivue/niivue": "^0.62.0",
+    "@tensorflow/tfjs": "^4.20.0",
+    "gl-matrix": "^3.4.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0",
+    "@types/node": "^20.12.12",
+    "@vitejs/plugin-react": "^5.0.4",
+    "vite": "^7.0.5",
+    "vite-plugin-compression": "^0.5.1"
+  },
+  "homepage": "https://tuttucodes.github.io/3d-Mri-Viewer/"
+}

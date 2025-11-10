@@ -1,0 +1,406 @@
+:root {
+  color-scheme: dark;
+  font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(120% 120% at 10% 10%, #1e293b 0%, #0f172a 40%, #020617 100%);
+  color: #f8fafc;
+  display: flex;
+  justify-content: center;
+  padding: 0;
+}
+
+.app {
+  width: min(1280px, 92vw);
+  margin: 2.5rem auto;
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  background: rgba(15, 23, 42, 0.58);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  box-shadow:
+    0 30px 60px rgba(15, 23, 42, 0.65),
+    inset 0 0 0 1px rgba(56, 189, 248, 0.08);
+  backdrop-filter: blur(24px);
+  border-radius: 28px;
+  overflow: hidden;
+}
+
+.toolbar {
+  background: rgba(15, 23, 42, 0.72);
+  border-bottom: 1px solid rgba(99, 102, 241, 0.15);
+  padding: 1.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.toolbar-toggle {
+  align-self: flex-start;
+  background: rgba(37, 99, 235, 0.18);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  color: #bfdbfe;
+  border-radius: 999px;
+  padding: 0.45rem 1rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.25s ease, background 0.25s ease;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.15);
+}
+
+.toolbar-toggle:hover {
+  transform: translateY(-1px);
+  background: rgba(79, 70, 229, 0.25);
+  box-shadow: 0 12px 26px rgba(99, 102, 241, 0.28);
+}
+
+.toolbar-panels {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  transition: grid-template-rows 0.35s ease, opacity 0.35s ease;
+}
+
+.toolbar-panels.collapsed {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.toolbar-panels.collapsed .toolbar-section {
+  overflow: hidden;
+}
+
+.toolbar-panels.open {
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  opacity: 1;
+}
+
+.toolbar-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1.5rem;
+}
+
+.toolbar-meta h1 {
+  margin: 0 0 0.35rem;
+  font-size: clamp(1.5rem, 2vw + 0.85rem, 2.25rem);
+  letter-spacing: 0.03em;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.toolbar-meta p {
+  margin: 0;
+  font-size: 0.95rem;
+  max-width: 640px;
+  line-height: 1.5;
+  color: rgba(226, 232, 240, 0.92);
+}
+
+.toolbar-meta strong {
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+.meta-badges {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 0.85rem;
+  background: rgba(148, 163, 184, 0.18);
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(226, 232, 240, 0.88);
+}
+
+.badge-accent {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.22), rgba(99, 102, 241, 0.28));
+  border-color: rgba(94, 234, 212, 0.35);
+  color: #f8fafc;
+}
+
+.toolbar-section {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+}
+
+.toolbar label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: rgba(203, 213, 225, 0.9);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.toolbar input[type='range'] {
+  accent-color: #38bdf8;
+  width: 160px;
+  background: rgba(30, 41, 59, 0.6);
+  border-radius: 999px;
+}
+
+.toolbar input[type='checkbox'] {
+  accent-color: #38bdf8;
+  width: 18px;
+  height: 18px;
+}
+
+.toolbar select {
+  min-width: 180px;
+  padding: 0.35rem 0.5rem;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 10px;
+  color: #e2e8f0;
+  font-size: 0.85rem;
+  box-shadow: inset 0 1px 1px rgba(148, 163, 184, 0.08);
+}
+
+.toolbar button {
+  background: linear-gradient(135deg, #2563eb, #6366f1);
+  color: #f8fafc;
+  border: none;
+  border-radius: 10px;
+  padding: 0.55rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.3s ease;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.28);
+}
+
+.toolbar button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: linear-gradient(135deg, #1d4ed8, #4f46e5);
+  box-shadow: 0 14px 30px rgba(37, 99, 235, 0.35);
+}
+
+.toolbar button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.toolbar-warning {
+  padding: 0.75rem 1rem;
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  border-radius: 8px;
+  color: #fecaca;
+  font-size: 0.85rem;
+}
+
+.viewer {
+  position: relative;
+  flex: 1;
+  background: radial-gradient(120% 120% at 50% 50%, rgba(15, 118, 255, 0.1) 0%, rgba(2, 6, 23, 0.96) 55%, #000510 100%);
+}
+
+.viewer-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.viewer-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 6, 23, 0.65);
+  backdrop-filter: blur(4px);
+}
+
+.viewer-status {
+  padding: 0.85rem 1.5rem;
+  background: rgba(30, 64, 175, 0.4);
+  border: 1px solid rgba(59, 130, 246, 0.7);
+  border-radius: 999px;
+  font-size: 0.9rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.status-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(160px, 1fr) auto auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem 2rem;
+  background: rgba(9, 14, 22, 0.82);
+  border-top: 1px solid rgba(99, 102, 241, 0.12);
+  font-size: 0.9rem;
+}
+
+.status-location {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.status-location p {
+  margin: 0;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 0.8rem;
+  color: #f1f5f9;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.status-location p:hover {
+  transform: translateY(-1px);
+  color: #cbd5f5;
+}
+
+.status-bar progress {
+  width: 100%;
+  height: 0.75rem;
+  border-radius: 999px;
+  overflow: hidden;
+  appearance: none;
+  background: rgba(51, 65, 85, 0.5);
+}
+
+.status-bar progress::-webkit-progress-bar {
+  background: rgba(51, 65, 85, 0.25);
+  border-radius: 999px;
+}
+
+.status-bar progress::-webkit-progress-value {
+  background: linear-gradient(90deg, #38bdf8 0%, #7c3aed 100%);
+  border-radius: 999px;
+}
+
+.status-bar progress::-moz-progress-bar {
+  background: linear-gradient(90deg, #38bdf8 0%, #7c3aed 100%);
+  border-radius: 999px;
+}
+
+.status-memory {
+  font-weight: 600;
+}
+
+.github-star {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  background: rgba(15, 23, 42, 0.85);
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  color: #e2e8f0;
+  transition: background 0.2s ease-in-out, border 0.2s ease-in-out, transform 0.2s ease;
+}
+
+.github-star:hover {
+  background: rgba(30, 41, 59, 0.9);
+  border-color: rgba(148, 163, 184, 0.35);
+  transform: translateY(-1px);
+}
+
+.github-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.github-star span {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.github-count {
+  padding: 0.1rem 0.5rem;
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 900px) {
+  body {
+    justify-content: flex-start;
+    background: radial-gradient(160% 160% at 50% 0%, #1e293b 0%, #0f172a 45%, #020617 100%);
+    padding: 0;
+  }
+
+  .app {
+    width: 100%;
+    margin: 0;
+    border-radius: 0;
+  }
+
+  .toolbar {
+    padding: 1.25rem 1.25rem 1rem;
+  }
+
+  .toolbar-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .toolbar-section {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .status-bar {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .github-star {
+    justify-self: flex-start;
+  }
+}
+
+@media (max-width: 600px) {
+  .toolbar-meta h1 {
+    font-size: 1.55rem;
+  }
+
+  .toolbar-meta p {
+    font-size: 0.85rem;
+  }
+
+  .badge {
+    font-size: 0.7rem;
+  }
+
+  .toolbar button,
+  .toolbar select,
+  .toolbar input[type='range'] {
+    width: 100%;
+  }
+
+  .status-bar {
+    padding: 1rem 1.25rem;
+  }
+
+  .github-star {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
