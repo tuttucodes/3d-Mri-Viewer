@@ -83,7 +83,7 @@ async function inferenceFullVolumePhase1(
       console.log('Transpose not enabled for pre-model')
     }
 
-    statData.pipelineVersion = 'PreModel_FV' // e.g. "PreModel_FV"
+    statData.TuttuViewer_Ver = 'PreModel_FV' // e.g. "PreModel_FV"
 
     // preModel.then(function (res) {
     const res = await preModel
@@ -296,8 +296,8 @@ async function inferenceFullVolumePhase1(
               slice_width,
               modelEntry,
               opts,
-              niftiHeader,
-              niftiImage,
+              callbackUI,
+              callbackImg,
               false
             )
             await tf.dispose(outLabelVolume)
@@ -456,10 +456,17 @@ async function runInferenceWW(opts, modelEntry, niftiHeader, niftiImage) {
   // read input shape from model.json object
   batchInputShape = modelObject.layers[0].batchInputShape
   console.log(' Model batch input shape : ', batchInputShape)
-  // -- Verify input shape
-  if (batchInputShape.length !== 5) {
-    const errTxt = 'The model input shape must be 5D'
+  // -- Verify input shape - support both 2D (4D) and 3D (5D) models
+  const is2DModel = batchInputShape.length === 4
+  if (batchInputShape.length !== 5 && !is2DModel) {
+    const errTxt = 'The model input shape must be 4D (2D model) or 5D (3D model)'
     callbackUI(errTxt, -1, errTxt)
+    return 0
+  }
+  
+  // Handle 2D models (like brain tumour model) - use main thread for now
+  if (is2DModel) {
+    callbackUI('2D models are not yet supported in webworker mode. Please disable webworker.', -1, '2D models require main thread execution. Please disable the "Use Webworker" option.')
     return 0
   }
   let batch_D, batch_H, batch_W
@@ -519,23 +526,21 @@ async function runInferenceWW(opts, modelEntry, niftiHeader, niftiImage) {
         niftiImage
       )
     } else {
-      // Transpose MRI data to be match pytorch/keras input output
-      console.log('Cropping Disabled')
-
-      if (transpose) {
-        slices_3d = slices_3d.transpose()
-        console.log('Input transposed')
-      } else {
-        console.log('Transpose NOT Enabled')
-      }
-
-      const enableSeqConv = modelEntry.enableSeqConv
-
-      if (enableSeqConv) {
-        callbackUI('', -1, 'inferenceFullVolumeSeqCovLayer() is not dead code?')
-      } else {
-        callbackUI('', -1, 'inferenceFullVolume() is not dead code?')
-      }
+      // FullVolume without Crop - run inference directly
+      console.log('Cropping Disabled - Running full volume inference')
+      
+      // Run full volume inference without cropping
+      await runFullVolumeInference(
+        opts,
+        modelEntry,
+        model,
+        slices_3d,
+        null, // No pipeline1_out (pre-model output)
+        statData,
+        callbackImg,
+        callbackUI,
+        niftiImage
+      )
     }
   }
 }

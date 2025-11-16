@@ -83,28 +83,40 @@ export async function runFullVolumeInference(
     slices_3d = await minMaxNormalizeVolumeData(slices_3d);
   }
 
-  // Masking
+  // Masking (only if cropping is enabled)
   let mask_3d;
-  if (pipeline1_out == null) {
-    const autoThresholdValue = modelEntry.autoThreshold;
-    if (autoThresholdValue > 0 && autoThresholdValue <= 1) {
-      mask_3d = await applyMriThreshold(slices_3d, autoThresholdValue);
+  let cropped_slices_3d_w_pad;
+  let refVoxel = [0, 0, 0]; // Default corner for non-cropped volumes
+  
+  if (modelEntry.enableCrop) {
+    if (pipeline1_out == null) {
+      const autoThresholdValue = modelEntry.autoThreshold;
+      if (autoThresholdValue > 0 && autoThresholdValue <= 1) {
+        mask_3d = await applyMriThreshold(slices_3d, autoThresholdValue);
+      } else {
+        mask_3d = await slices_3d.greater([0]).asType('bool');
+      }
     } else {
-      mask_3d = await slices_3d.greater([0]).asType('bool');
+      mask_3d = await pipeline1_out.greater([0]).asType('bool');
     }
-  } else {
-    mask_3d = await pipeline1_out.greater([0]).asType('bool');
-  }
 
-  // Cropping and Padding
-  const pad = modelEntry.cropPadding;
-  let { cropped: cropped_slices_3d_w_pad, corner: refVoxel } = await cropAndGetCorner(slices_3d, mask_3d, pad);
-  slices_3d.dispose();
-  mask_3d.dispose();
+    // Cropping and Padding
+    const pad = modelEntry.cropPadding;
+    const cropResult = await cropAndGetCorner(slices_3d, mask_3d, pad);
+    cropped_slices_3d_w_pad = cropResult.cropped;
+    refVoxel = cropResult.corner;
+    slices_3d.dispose();
+    mask_3d.dispose();
+  } else {
+    // No cropping - use the full volume
+    console.log('Cropping disabled - using full volume');
+    cropped_slices_3d_w_pad = slices_3d;
+    // Don't dispose slices_3d here as we're using it
+  }
 
   if (modelEntry.enableTranspose) {
     cropped_slices_3d_w_pad = cropped_slices_3d_w_pad.transpose();
-    console.log('Input transposed for pre-model');
+    console.log('Input transposed');
   }
 
   // --- 2. UNIFIED MODEL & TENSOR PREPARATION ---
@@ -244,11 +256,15 @@ export async function runFullVolumeInference(
     outLabelVolume = outLabelVolume.transpose();
   }
 
-    //Restore to original volume size
+    //Restore to original volume size (only if cropping was enabled)
   const PaddingStartTime = performance.now();
   console.log('outLabelVolume without padding shape: ', outLabelVolume.shape);
-  outLabelVolume = await restoreTo256Cube(outLabelVolume, refVoxel);
-  console.log('outLabelVolume final shape after padding to 256: ', outLabelVolume.shape);
+  if (modelEntry.enableCrop) {
+    outLabelVolume = await restoreTo256Cube(outLabelVolume, refVoxel);
+    console.log('outLabelVolume final shape after padding to 256: ', outLabelVolume.shape);
+  } else {
+    console.log('No padding needed - volume was not cropped');
+  }
   const Padding_t = ((performance.now() - PaddingStartTime) / 1000).toFixed(4);
   console.log(`---- Padding back to 256^3 Time: ${Padding_t} seconds ----`);
 
@@ -258,9 +274,15 @@ export async function runFullVolumeInference(
   console.log(`---- Postprocessing Time: ${Postprocess_t} seconds ----`);
 
 
-  outLabelVolume.dispose();
+  // Cleanup
+  if (outLabelVolume) {
+    outLabelVolume.dispose();
+  }
+  if (cropped_slices_3d_w_pad && !modelEntry.enableCrop) {
+    // Only dispose if we didn't crop (since we reused slices_3d)
+    cropped_slices_3d_w_pad.dispose();
+  }
   tf.engine().disposeVariables();
-
 
   // --- TIMER END (Total Execution) ---
   const totalExecutionTime = ((performance.now() - totalExecutionStartTime) / 1000).toFixed(4);
@@ -270,7 +292,7 @@ export async function runFullVolumeInference(
   statData.Inference_t = Inference_t;
   statData.Postprocess_t = Postprocess_t;
   statData.Status = 'OK';
-  callbackUI('Segmentation finished', 0);
+  callbackUI('Segmentation finished', 1.0);
   callbackUI('', -1, '', statData);
   callbackImg(outimg, opts, modelEntry);
 

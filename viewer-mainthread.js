@@ -59,7 +59,7 @@ async function inferenceFullVolumePhase1(
       console.log('Transpose not enabled for pre-model')
     }
 
-    statData.pipelineVersion = 'PreModel_FV' // e.g. "PreModel_FV"
+    statData.TuttuViewer_Ver = 'PreModel_FV' // e.g. "PreModel_FV"
 
     // preModel.then(function (res) {
     const res = await preModel
@@ -385,6 +385,144 @@ async function inferenceFullVolumePhase1(
   }
 }
 
+async function run2DModelInference(
+  opts,
+  modelEntry,
+  model,
+  niftiHeader,
+  niftiImage,
+  callbackImg,
+  callbackUI,
+  statData
+) {
+  console.log('Starting 2D model inference for brain tumour model')
+  const inferenceStartTime = performance.now()
+  
+  // Get volume dimensions
+  const slice_width = niftiHeader.dims[1]
+  const slice_height = niftiHeader.dims[2]
+  const num_of_slices = niftiHeader.dims[3]
+  
+  // Get model input shape
+  const modelObject = await model
+  const batchInputShape = modelObject.layers[0].batchInputShape
+  const modelHeight = batchInputShape[1] // 128
+  const modelWidth = batchInputShape[2]  // 128
+  const modelChannels = batchInputShape[3] // 2
+  
+  console.log(`Model expects: ${modelHeight}x${modelWidth}x${modelChannels}`)
+  console.log(`Volume size: ${slice_height}x${slice_width}, ${num_of_slices} slices`)
+  
+  // Get all slices as 3D tensor
+  let slices_3d = await getAllSlicesDataAsTF3D(num_of_slices, niftiHeader, niftiImage)
+  
+  // Normalize the volume
+  slices_3d = await minMaxNormalizeVolumeData(slices_3d)
+  
+  // Unstack to get individual slices
+  const sliceTensors = await tf.unstack(slices_3d)
+  slices_3d.dispose()
+  
+  // Process each slice
+  const outputSlices = []
+  const totalSlices = sliceTensors.length
+  
+  for (let i = 0; i < totalSlices; i++) {
+    callbackUI(`Processing slice ${i + 1}/${totalSlices}`, (i + 1) / totalSlices)
+    
+    let slice = sliceTensors[i]
+    
+    // Resize slice to model input size (128x128)
+    slice = tf.image.resizeBilinear(
+      slice.expandDims(2), // Add channel dimension: [H, W] -> [H, W, 1]
+      [modelHeight, modelWidth]
+    )
+    
+    // Handle 2-channel input requirement
+    // Duplicate the single channel to create 2 channels
+    if (modelChannels === 2) {
+      slice = tf.concat([slice, slice], 2) // [H, W, 1] -> [H, W, 2]
+    }
+    
+    // Add batch dimension: [H, W, C] -> [1, H, W, C]
+    slice = slice.expandDims(0)
+    
+    // Run inference on this slice
+    try {
+      // Use predict method for the model
+      const prediction = modelObject.predict(slice)
+      
+      // Get argmax for each pixel (4 classes) - argmax along channel dimension (axis 3)
+      const argmax = tf.argMax(prediction, 3).squeeze() // Remove batch dimension: [1, H, W] -> [H, W]
+      
+      // Resize back to original slice size if needed
+      let finalOutput = argmax
+      if (modelHeight !== slice_height || modelWidth !== slice_width) {
+        finalOutput = tf.image.resizeNearestNeighbor(
+          argmax.expandDims(0).expandDims(3).cast('float32'), // [H, W] -> [1, H, W, 1]
+          [slice_height, slice_width]
+        ).squeeze([0, 3]) // Remove batch and channel dims: [1, H, W, 1] -> [H, W]
+      }
+      
+      // Get data and convert to Uint8Array
+      const outputData = await finalOutput.data()
+      const outputSlice = new Uint8Array(slice_height * slice_width)
+      for (let j = 0; j < outputSlice.length; j++) {
+        outputSlice[j] = Math.round(outputData[j])
+      }
+      
+      outputSlices.push(outputSlice)
+      
+      // Cleanup tensors
+      slice.dispose()
+      prediction.dispose()
+      argmax.dispose()
+      if (finalOutput !== argmax) {
+        finalOutput.dispose()
+      }
+      sliceTensors[i].dispose()
+      
+      // Force GPU sync every 10 slices to prevent memory issues
+      if ((i + 1) % 10 === 0) {
+        await tf.nextFrame()
+        // Small delay to allow GPU to catch up
+        await new Promise(resolve => setTimeout(resolve, 10))
+      }
+    } catch (error) {
+      console.error(`Error processing slice ${i}:`, error)
+      callbackUI(`Error processing slice ${i + 1}: ${error.message}`, -1)
+      // Fill with zeros on error
+      outputSlices.push(new Uint8Array(slice_height * slice_width))
+      if (slice) slice.dispose()
+      sliceTensors[i].dispose()
+    }
+  }
+  
+  // Combine all slices back into 3D volume
+  const totalVoxels = slice_height * slice_width * num_of_slices
+  const outputVolume = new Uint8Array(totalVoxels)
+  let offset = 0
+  for (let i = 0; i < outputSlices.length; i++) {
+    outputVolume.set(outputSlices[i], offset)
+    offset += outputSlices[i].length
+  }
+  
+  const inferenceTime = ((performance.now() - inferenceStartTime) / 1000).toFixed(4)
+  console.log(`2D Model Inference Time: ${inferenceTime} seconds`)
+  
+  statData.Inference_t = inferenceTime
+  statData.Postprocess_t = 0
+  statData.Status = 'OK'
+  statData.isModelFullVol = false
+  statData.TuttuViewer_Ver = '2D_SliceBySlice'
+  
+  callbackUI('Segmentation finished', 1.0)
+  callbackUI('', -1, '', statData)
+  callbackImg(outputVolume, opts, modelEntry)
+  
+  return 0
+}
+
 async function enableProductionMode(textureF16Flag = true) {
   // -- tf.setBackend('cpu')
   // -- tf.removeBackend('cpu')
@@ -417,11 +555,6 @@ export async function runInference(opts, modelEntry, niftiHeader, niftiImage, ca
     callbackUI(errTxt, -1, errTxt)
     return 0
   }
-  if (isNaN(numOfChan) || numOfChan !== 1) {
-    const errTxt = 'The number of channels for input shape must be 1'
-    callbackUI(errTxt, -1, errTxt)
-    return 0
-  }
   tf.engine().startScope()
   console.log('Batch size: ', batchSize)
   console.log('Num of Channels: ', numOfChan)
@@ -436,11 +569,34 @@ export async function runInference(opts, modelEntry, niftiHeader, niftiImage, ca
   // read input shape from model.json object
   batchInputShape = modelObject.layers[0].batchInputShape
   console.log(' Model batch input shape : ', batchInputShape)
-  // -- Verify input shape
-  if (batchInputShape.length !== 5) {
-    const errTxt = 'The model input shape must be 5D'
+  // -- Verify input shape - support both 2D (4D) and 3D (5D) models
+  const is2DModel = batchInputShape.length === 4
+  
+  // For 3D models, check channel requirement
+  if (!is2DModel && (isNaN(numOfChan) || numOfChan !== 1)) {
+    const errTxt = 'The number of channels for input shape must be 1'
     callbackUI(errTxt, -1, errTxt)
     return 0
+  }
+  if (batchInputShape.length !== 5 && !is2DModel) {
+    const errTxt = 'The model input shape must be 4D (2D model) or 5D (3D model)'
+    callbackUI(errTxt, -1, errTxt)
+    return 0
+  }
+  
+  // Handle 2D models (like brain tumour model)
+  if (is2DModel) {
+    console.log('Detected 2D model - using slice-by-slice inference')
+    return await run2DModelInference(
+      opts,
+      modelEntry,
+      model,
+      niftiHeader,
+      niftiImage,
+      callbackImg,
+      callbackUI,
+      statData
+    )
   }
   let batch_D, batch_H, batch_W
   const slice_width = niftiHeader.dims[1]
@@ -449,7 +605,8 @@ export async function runInference(opts, modelEntry, niftiHeader, niftiImage, ca
   const isChannelLast = await isModelChnlLast(modelObject)
   if (isChannelLast) {
     console.log('Model Channel Last')
-    if (isNaN(batchInputShape[4]) || batchInputShape[4] !== 1) {
+    // For 2D models, skip channel check as they may have different channel requirements
+    if (!is2DModel && (isNaN(batchInputShape[4]) || batchInputShape[4] !== 1)) {
       const errTxt = 'The number of channels for input shape must be 1'
       callbackUI(errTxt, -1, errTxt)
       return 0
@@ -459,7 +616,8 @@ export async function runInference(opts, modelEntry, niftiHeader, niftiImage, ca
     batch_W = batchInputShape[3]
   } else {
     console.log('Model Channel First')
-    if (isNaN(batchInputShape[1]) || batchInputShape[1] !== 1) {
+    // For 2D models, skip channel check as they may have different channel requirements
+    if (!is2DModel && (isNaN(batchInputShape[1]) || batchInputShape[1] !== 1)) {
       const errTxt = 'The number of channels for input shape must be 1'
       callbackUI(errTxt, -1, errTxt)
       return 0
@@ -506,25 +664,22 @@ export async function runInference(opts, modelEntry, niftiHeader, niftiImage, ca
         niftiImage
       )
     } else {
-      // Transpose MRI data to be match pytorch/keras input output
-      console.log('Cropping Disabled')
-
-      if (transpose) {
-        slices_3d = slices_3d.transpose()
-        console.log('Input transposed')
-      } else {
-        console.log('Transpose NOT Enabled')
-      }
-
-      const enableSeqConv = modelEntry.enableSeqConv
-
-      if (enableSeqConv) {
-        console.log('Seq Convoluton Enabled')
-        window.alert('inferenceFullVolumeSeqCovLayer() is not dead code?')
-      } else {
-        console.log('Seq Convoluton Disabled')
-        window.alert('inferenceFullVolume() is not dead code?')
-      }
+      // FullVolume without Crop - run inference directly
+      console.log('Cropping Disabled - Running full volume inference')
+      
+      // Run full volume inference without cropping
+      // runFullVolumeInference will handle normalization and transpose
+      await runFullVolumeInference(
+        opts,
+        modelEntry,
+        model,
+        slices_3d,
+        null, // No pipeline1_out (pre-model output)
+        statData,
+        callbackImg,
+        callbackUI,
+        niftiImage
+      )
     }
   }
 }

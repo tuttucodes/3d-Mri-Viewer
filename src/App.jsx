@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Niivue } from '@niivue/niivue'
 import { runInference } from '../viewer-mainthread.js'
-import { inferenceModelsList, viewerOptions } from '../viewer-parameters.js'
+import { inferenceModelsList, tuttuViewerOpts } from '../viewer-parameters.js'
 import { isChrome, localSystemDetails } from '../viewer-diagnostics.js'
 import MyWorker from '../viewer-webworker.js?worker'
 
@@ -21,8 +21,8 @@ const PEN_OPTIONS = [
 
 const cloneOptions = () =>
   typeof structuredClone === 'function'
-    ? structuredClone(viewerOptions)
-    : JSON.parse(JSON.stringify(viewerOptions))
+    ? structuredClone(tuttuViewerOpts)
+    : JSON.parse(JSON.stringify(tuttuViewerOpts))
 
 export default function App() {
   const canvasRef = useRef(null)
@@ -98,9 +98,16 @@ export default function App() {
   }, [])
 
   const fetchJSON = useCallback(async (fnm) => {
-    const response = await fetch(fnm)
+    // Resolve relative paths to absolute paths for Vite
+    let url = fnm
+    if (fnm.startsWith('./')) {
+      url = fnm.replace('./', '/')
+    } else if (!fnm.startsWith('/') && !fnm.startsWith('http')) {
+      url = '/' + fnm
+    }
+    const response = await fetch(url)
     if (!response.ok) {
-      throw new Error(`Unable to load ${fnm}`)
+      throw new Error(`Unable to load ${url}: ${response.statusText}`)
     }
     return response.json()
   }, [])
@@ -192,16 +199,27 @@ export default function App() {
       overlayVolume.img = new Uint8Array(img)
       const roiVolumes = await getUniqueValuesAndCounts(overlayVolume.img)
       if (modelEntry.colormapPath) {
-        const cmap = await fetchJSON(modelEntry.colormapPath)
-        missingLabelStatusRef.current = ''
-        const newLabels = createLabeledCounts(roiVolumes, cmap.labels)
-        overlayVolume.setColormapLabel({
-          R: cmap.R,
-          G: cmap.G,
-          B: cmap.B,
-          labels: newLabels,
-        })
-        overlayVolume.hdr.intent_code = 1002
+        try {
+          const cmap = await fetchJSON(modelEntry.colormapPath)
+          missingLabelStatusRef.current = ''
+          const newLabels = createLabeledCounts(roiVolumes, cmap.labels)
+          overlayVolume.setColormapLabel({
+            R: cmap.R,
+            G: cmap.G,
+            B: cmap.B,
+            labels: newLabels,
+          })
+          overlayVolume.hdr.intent_code = 1002
+        } catch (error) {
+          console.error('Error loading colormap:', error)
+          // Fall back to default colormap if colormap file fails to load
+          let colormap = opts.atlasSelectedColorTable.toLowerCase()
+          const cmaps = nv.colormaps()
+          if (!cmaps.includes(colormap)) {
+            colormap = 'actc'
+          }
+          overlayVolume.colormap = colormap
+        }
       } else {
         let colormap = opts.atlasSelectedColorTable.toLowerCase()
         const cmaps = nv.colormaps()
@@ -224,7 +242,10 @@ export default function App() {
       if (modelIndex === '' || Number.isNaN(Number(modelIndex))) return
       const index = Number(modelIndex)
       const nv = nvRef.current
-      if (!nv || nv.volumes.length === 0) return
+      if (!nv || nv.volumes.length === 0) {
+        window.alert('Please load an MRI image first before running segmentation.')
+        return
+      }
       const modelEntry = models[index]
       if (!modelEntry) return
       missingLabelStatusRef.current = ''
@@ -282,15 +303,28 @@ export default function App() {
             handleCallbackImg(event.data.img, event.data.opts, event.data.modelEntry)
           }
         }
+        worker.onerror = (error) => {
+          console.error('Worker error:', error)
+          workerRef.current?.terminate()
+          workerRef.current = null
+          setIsRunning(false)
+          window.alert(`Segmentation error: ${error.message || 'Unknown error'}`)
+        }
       } else {
-        runInference(
-          opts,
-          modelEntry,
-          nv.volumes[0].hdr,
-          nv.volumes[0].img,
-          handleCallbackImg,
-          handleCallbackUI,
-        )
+        try {
+          await runInference(
+            opts,
+            modelEntry,
+            nv.volumes[0].hdr,
+            nv.volumes[0].img,
+            handleCallbackImg,
+            handleCallbackUI,
+          )
+        } catch (error) {
+          console.error('Inference error:', error)
+          setIsRunning(false)
+          window.alert(`Segmentation error: ${error.message || 'Unknown error'}`)
+        }
       }
     },
     [
@@ -330,17 +364,74 @@ export default function App() {
       setIsVolumeReady(true)
       updateBackgroundOpacity(backgroundOpacity)
     }
-    nv
-      .loadVolumes([{ url: './t1_crop.nii.gz' }])
-      .catch((error) => {
-        console.error('Error loading default volume', error)
+    
+    // Try to load default volume, but don't fail if it doesn't exist
+    const possiblePaths = ['./public/t1_crop.nii.gz', './t1_crop.nii.gz', '/public/t1_crop.nii.gz']
+    let loaded = false
+    const tryLoadDefault = async () => {
+      for (const path of possiblePaths) {
+        try {
+          await nv.loadVolumes([{ url: path }])
+          loaded = true
+          break
+        } catch (e) {
+          // Try next path
+        }
+      }
+      if (!loaded) {
+        console.log('Default volume not found, waiting for user to load file')
         setIsVolumeReady(false)
-      })
+      }
+    }
+    tryLoadDefault()
+
+    // Set up drag and drop handlers
+    const handleDragOver = (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+
+    const handleDragEnter = (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+
+    const handleDrop = async (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      const files = e.dataTransfer.files
+      if (files.length > 0) {
+        const file = files[0]
+        if (file.name.endsWith('.nii') || file.name.endsWith('.nii.gz') || file.name.endsWith('.gz')) {
+          const url = URL.createObjectURL(file)
+          try {
+            await nv.loadVolumes([{ url }])
+            setIsVolumeReady(true)
+            updateBackgroundOpacity(backgroundOpacity)
+          } catch (error) {
+            console.error('Error loading file:', error)
+            window.alert('Error loading file. Please make sure it is a valid NIfTI file.')
+          } finally {
+            URL.revokeObjectURL(url)
+          }
+        } else {
+          window.alert('Please drop a valid NIfTI file (.nii or .nii.gz)')
+        }
+      }
+    }
+
+    document.addEventListener('dragover', handleDragOver)
+    document.addEventListener('dragenter', handleDragEnter)
+    document.addEventListener('drop', handleDrop)
+
     return () => {
       if (workerRef.current) {
         workerRef.current.terminate()
         workerRef.current = null
       }
+      document.removeEventListener('dragover', handleDragOver)
+      document.removeEventListener('dragenter', handleDragEnter)
+      document.removeEventListener('drop', handleDrop)
       nvRef.current = null
     }
   }, [backgroundOpacity, updateBackgroundOpacity])
@@ -571,9 +662,9 @@ export default function App() {
               AI Project · 3D MRI Scan Model
             </h1>
             <p>
-              Presented by <strong>Krishnaa Nair</strong>, <strong>Rahul Babu</strong>, and <strong>Pallavi
-              Chimanchode</strong>. Course: <strong>Artificial Intelligence</strong> · Faculty: <strong>Dr Deepika
-              Roselind</strong>
+              Presented by <strong>Rahul Babu</strong> & <strong>Krishnaa Nair</strong>. Course: <strong>Software Engineering</strong>
+              <br />
+              Faculty: <strong>Dr Ilavarasi AK</strong>
             </p>
           </div>
           <div className="meta-badges">
@@ -620,6 +711,31 @@ export default function App() {
               max="255"
               value={overlayOpacity}
               onChange={handleOverlayOpacityChange}
+            />
+          </label>
+          <label>
+            Load MRI File
+            <input
+              type="file"
+              accept=".nii,.nii.gz,.gz"
+              onChange={async (e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                const nv = nvRef.current
+                if (!nv) return
+                const url = URL.createObjectURL(file)
+                try {
+                  await nv.loadVolumes([{ url }])
+                  setIsVolumeReady(true)
+                  updateBackgroundOpacity(backgroundOpacity)
+                } catch (error) {
+                  console.error('Error loading file:', error)
+                  window.alert('Error loading file. Please make sure it is a valid NIfTI file.')
+                } finally {
+                  URL.revokeObjectURL(url)
+                }
+              }}
+              style={{ display: 'block', marginTop: '5px' }}
             />
           </label>
           <label>
@@ -693,7 +809,7 @@ export default function App() {
         {(!isVolumeReady || isRunning) && (
           <div className="viewer-overlay">
             <div className="viewer-status">
-              {!isVolumeReady ? 'Loading sample volume…' : 'Running segmentation…'}
+              {!isVolumeReady ? 'Drag and drop a NIfTI file (.nii or .nii.gz) or use the file input above' : 'Running segmentation…'}
             </div>
           </div>
         )}

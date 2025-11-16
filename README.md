@@ -8,7 +8,6 @@ An interactive, browser-based 3D MRI segmentation viewer built with React, Tenso
 
 - Krishnaa Nair  
 - Rahul Babu  
-- Pallavi Chimanchode  
 
 ---
 

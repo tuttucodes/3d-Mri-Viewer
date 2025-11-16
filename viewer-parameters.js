@@ -1,6 +1,6 @@
-export { inferenceModelsList, viewerOptions }
+export {inferenceModelsList, tuttuViewerOpts }
 
-const viewerOptions = {
+const tuttuViewerOpts = {
   // General settings for input shape [batchSize, batch_D, batch_H, batch_W, numOfChan]
   batchSize: 1, // How many batches are used during each inference iteration
   numOfChan: 1, // num of channel of the input shape
@@ -16,7 +16,7 @@ const viewerOptions = {
   browserArrayBufferMaxZDim: 30, // This value depends on Memory available
   telemetryFlag: false, // Ethical and transparent collection of browser usage while adhering to security and privacy standards
   chartXaxisStepPercent: 10, // percent from total labels on Xaxis
-  uiSampleName: 'MRI_UI_SAMPLE', // Sample name used by interface
+  uiSampleName: 'BC_UI_Sample', // Sample name used by interface
   atlasSelectedColorTable: 'Fire' // Select from ["Hot-and-Cold", "Fire", "Grayscale", "Gold", "Spectrum"]
 }
 
@@ -422,5 +422,28 @@ const inferenceModelsList = [
     inferenceDelay: 100, // Delay in ms time while looping layers applying.
     description:
       'The omnimodal skull stripping model delivers high-accuracy brain extraction in seconds, supporting multiple imaging modalities including T1, T2, FLAIR, DWI, EPI, MRA, PDw, CT, and PET without a need for tuning. It runs in a single pass with only 15 filters per layer, and is offered in high-memory/fast and low-memory/slow configurations. Use it today to improve and accelerate your brain extraction!'
+  },
+  {
+    id: 18,
+    type: 'Segmentation',
+    path: '/models/braintumour/model.json',
+    modelName: '🧠 Brain Tumour Model',
+    colormapPath: './models/braintumour/colormap.json',
+    preModelId: null,
+    preModelPostProcess: false,
+    isBatchOverlapEnable: false,
+    numOverlapBatches: 0,
+    enableTranspose: false,
+    enableCrop: false,
+    cropPadding: 0,
+    autoThreshold: 0,
+    enableQuantileNorm: false,
+    filterOutWithPreMask: false,
+    enableSeqConv: false,
+    textureSize: 0,
+    warning: "This 2D model processes slices sequentially and may take longer. For best performance, disable webworker mode. For more info please check with Browser Resources <i class='fa fa-cogs'></i>.",
+    inferenceDelay: 100,
+    description:
+      'Brain tumour segmentation model for detecting necrotic regions, edema, and enhancing tumour areas in brain MRI scans. This model segments brain tumours into 4 classes: Background, Necrotic, Edema, and Enhancing regions.'
   },    
 ] // inferenceModelsList

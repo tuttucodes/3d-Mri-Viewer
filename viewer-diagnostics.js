@@ -152,9 +152,9 @@ async function localSystemDetails(statData, gl = null) {
   // -- Timing data to collect
   const today = new Date()
   if (statData.isModelFullVol) {
-    statData.pipelineVersion = 'FullVolume'
+    statData.TuttuViewer_Ver = 'FullVolume'
   } else {
-    statData.pipelineVersion = 'SubVolumes'
+    statData.TuttuViewer_Ver = 'SubVolumes'
   }
 
   /* let geoData = getBrowserLocationInfo()
@@ -179,7 +179,7 @@ async function localSystemDetails(statData, gl = null) {
   statData.GPU_Vendor_Full = await detectGPUVendor_v0(gl)
   statData.GPU_Card_Full = await detectGPUCardType_v0(gl)
   statData.CPU_Cores = await getCPUNumCores()
-  statData.pipelineName = 'MRIViewer'
+  statData.Which_TuttuViewer = 'latest'
   if (await isChrome()) {
     statData.Heap_Size_MB = window.performance.memory.totalJSHeapSize / (1024 * 1024).toFixed(2)
     statData.Used_Heap_MB = window.performance.memory.usedJSHeapSize / (1024 * 1024).toFixed(2)

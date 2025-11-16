@@ -1,0 +1,8 @@
+{
+    "R": [0, 255, 0, 255],
+    "G": [0, 0, 255, 255],
+    "B": [0, 255, 255, 0],
+    "labels": ["Background", "Necrotic", "Edema", "Enhancing"]
+}
+
+
